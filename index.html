@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>💣 Desactiva la Bomba</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#000000" />
+  <style>
+    body {
+      background: black;
+      color: lime;
+      font-family: monospace;
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 2em;
+      margin-bottom: 1em;
+    }
+    #timer {
+      font-size: 3em;
+      margin-top: 1rem;
+    }
+    button {
+      font-size: 1.5em;
+      padding: 1rem 2rem;
+      background: red;
+      color: white;
+      border: none;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>💣 Desactiva la Bomba</h1>
+<p>Mueve el móvil para desactivarla antes de que explote...</p>
+<button onclick="startGame()">Iniciar</button>
+<div id="timer"></div>
+
+<script>
+  let countdown = 10;
+  let interval;
+  let motionForce = 0;
+  let bombDisabled = false;
+  let stopTorch = null;
+
+  async function turnOnTorch() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", torch: true }
+    });
+
+    const track = stream.getVideoTracks()[0];
+    const imageCapture = new ImageCapture(track);
+    const capabilities = await imageCapture.getPhotoCapabilities();
+
+    if (capabilities.torch) {
+      await track.applyConstraints({ advanced: [{ torch: true }] });
+    }
+
+    return () => {
+      track.stop();
+    };
+  }
+
+  function startGame() {
+    countdown = 10;
+    motionForce = 0;
+    bombDisabled = false;
+    document.getElementById("timer").textContent = countdown + "s";
+
+    if (navigator.mediaDevices && 'getUserMedia' in navigator.mediaDevices) {
+      turnOnTorch().then(stop => stopTorch = stop);
+    }
+
+    interval = setInterval(() => {
+      countdown--;
+      document.getElementById("timer").textContent = countdown + "s";
+
+      if (countdown <= 0) {
+        clearInterval(interval);
+        if (!bombDisabled) boom();
+      }
+    }, 1000);
+  }
+
+  window.addEventListener("devicemotion", e => {
+    if (bombDisabled) return;
+
+    let acc = e.acceleration;
+    let total = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
+    motionForce += total;
+
+    if (motionForce > 100) {
+      bombDisabled = true;
+      clearInterval(interval);
+      if (stopTorch) stopTorch();
+      navigator.vibrate([200, 100, 200]);
+      document.getElementById("timer").textContent = "💚 Desactivada";
+    }
+  });
+
+  function boom() {
+    if (stopTorch) stopTorch();
+    navigator.vibrate([500, 200, 500, 200, 1000]);
+    document.body.style.background = "red";
+    document.getElementById("timer").textContent = "💥 ¡BOOM!";
+  }
+
+  // Registrar service worker para PWA
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+  }
+</script>
+</body>
+</html>
