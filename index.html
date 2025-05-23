@@ -1,43 +1,122 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>💣 Desactiva la Bomba</title>
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#000000" />
-  <style>
-    body {
-      background: black;
-      color: lime;
-      font-family: monospace;
-      text-align: center;
-      padding: 2rem;
-    }
-    h1 {
-      font-size: 2em;
-      margin-bottom: 1em;
-    }
-    #timer {
-      font-size: 3em;
-      margin-top: 1rem;
-    }
-    button {
-      font-size: 1.5em;
-      padding: 1rem 2rem;
-      background: red;
-      color: white;
-      border: none;
-      border-radius: 10px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>💣 Desactiva la Bomba - Juego de Linterna</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#121212" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap');
+  body {
+    background: radial-gradient(circle at center, #222 0%, #000 80%);
+    color: #00ff00;
+    font-family: 'Orbitron', monospace, monospace;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100vh;
+    margin: 0;
+    padding: 2rem 1rem;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  h1 {
+    font-size: 3rem;
+    margin-bottom: 0.3em;
+    text-shadow: 0 0 8px #00ff00;
+  }
+
+  p {
+    font-size: 1.2rem;
+    margin: 0 0 1.5rem 0;
+    text-shadow: 0 0 5px #0f0;
+  }
+
+  #timer {
+    font-size: 4rem;
+    font-weight: 900;
+    letter-spacing: 0.15em;
+    margin: 0.5rem 0 1.5rem 0;
+    text-shadow:
+      0 0 10px #00ff00,
+      0 0 20px #00ff00,
+      0 0 30px #0f0,
+      0 0 40px #0f0,
+      0 0 70px #0f0;
+  }
+
+  button {
+    background: #ff3333;
+    border: none;
+    color: white;
+    font-size: 1.6rem;
+    padding: 1rem 3rem;
+    border-radius: 12px;
+    box-shadow: 0 0 15px #ff2222;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    font-weight: 700;
+    text-transform: uppercase;
+    user-select: none;
+  }
+  button:active {
+    background: #cc0000;
+  }
+  button:disabled {
+    background: #555;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  #progress-bar-container {
+    width: 90vw;
+    max-width: 400px;
+    height: 20px;
+    background: #222;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 0 8px #0f0;
+    margin-bottom: 1.5rem;
+  }
+
+  #progress-bar {
+    height: 100%;
+    background: #0f0;
+    width: 100%;
+    transition: width 1s linear;
+  }
+
+  /* Flash efecto para agitar */
+  #flash {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #0f0;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 999;
+    transition: opacity 0.15s ease-out;
+  }
+</style>
 </head>
 <body>
 
 <h1>💣 Desactiva la Bomba</h1>
-<p>Mueve el móvil para desactivarla antes de que explote...</p>
-<button onclick="startGame()">Iniciar</button>
-<div id="timer"></div>
+<p>Mueve tu móvil con fuerza para desactivarla antes de que explote...</p>
+
+<div id="progress-bar-container">
+  <div id="progress-bar"></div>
+</div>
+
+<div id="timer">10s</div>
+
+<button id="start-btn">Iniciar</button>
+
+<div id="flash"></div>
 
 <script>
   let countdown = 10;
@@ -46,37 +125,126 @@
   let bombDisabled = false;
   let stopTorch = null;
 
-  async function turnOnTorch() {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", torch: true }
-    });
+  const timerEl = document.getElementById("timer");
+  const startBtn = document.getElementById("start-btn");
+  const progressBar = document.getElementById("progress-bar");
+  const flash = document.getElementById("flash");
 
-    const track = stream.getVideoTracks()[0];
-    const imageCapture = new ImageCapture(track);
-    const capabilities = await imageCapture.getPhotoCapabilities();
+  // Sonidos simples con Web Audio API
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-    if (capabilities.torch) {
-      await track.applyConstraints({ advanced: [{ torch: true }] });
-    }
-
-    return () => {
-      track.stop();
-    };
+  function playBeep(freq = 440, duration = 150) {
+    const oscillator = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    oscillator.type = "square";
+    oscillator.frequency.value = freq;
+    oscillator.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    oscillator.start();
+    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration / 1000);
+    oscillator.stop(audioCtx.currentTime + duration / 1000);
   }
 
-  function startGame() {
+  function playSuccessSound() {
+    playBeep(880, 200);
+    setTimeout(() => playBeep(1320, 150), 250);
+  }
+
+  function playExplosionSound() {
+    let duration = 500;
+    let now = audioCtx.currentTime;
+    let oscillator = audioCtx.createOscillator();
+    oscillator.type = 'sawtooth';
+    oscillator.frequency.setValueAtTime(100, now);
+    oscillator.frequency.exponentialRampToValueAtTime(20, now + duration / 1000);
+    let gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.5, now);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + duration / 1000);
+    oscillator.connect(gain);
+    gain.connect(audioCtx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + duration / 1000);
+  }
+
+  async function turnOnTorch() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return null;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", torch: true }
+      });
+
+      const track = stream.getVideoTracks()[0];
+      const imageCapture = new ImageCapture(track);
+      const capabilities = await imageCapture.getPhotoCapabilities();
+
+      if (capabilities.torch) {
+        await track.applyConstraints({ advanced: [{ torch: true }] });
+        return () => track.stop();
+      }
+      return () => track.stop();
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function flashScreen() {
+    flash.style.opacity = 0.7;
+    setTimeout(() => (flash.style.opacity = 0), 150);
+  }
+
+  function updateProgressBar() {
+    const percent = (countdown / 10) * 100;
+    progressBar.style.width = percent + "%";
+  }
+
+  function resetGame() {
     countdown = 10;
     motionForce = 0;
     bombDisabled = false;
-    document.getElementById("timer").textContent = countdown + "s";
+    timerEl.textContent = countdown + "s";
+    updateProgressBar();
+    document.body.style.background = "radial-gradient(circle at center, #222 0%, #000 80%)";
+    startBtn.disabled = false;
+    startBtn.textContent = "Iniciar";
+  }
 
-    if (navigator.mediaDevices && 'getUserMedia' in navigator.mediaDevices) {
-      turnOnTorch().then(stop => stopTorch = stop);
-    }
+  function boom() {
+    if (stopTorch) stopTorch();
+    playExplosionSound();
+    navigator.vibrate([500, 300, 500]);
+    document.body.style.background = "radial-gradient(circle at center, #700000 0%, #220000 80%)";
+    timerEl.textContent = "💥 ¡BOOM!";
+    progressBar.style.width = "0%";
+    startBtn.disabled = false;
+    startBtn.textContent = "Reintentar";
+  }
+
+  function disableBomb() {
+    bombDisabled = true;
+    if (stopTorch) stopTorch();
+    playSuccessSound();
+    navigator.vibrate([200, 100, 200]);
+    timerEl.textContent = "💚 Desactivada";
+    document.body.style.background = "radial-gradient(circle at center, #004400 0%, #001100 80%)";
+    progressBar.style.width = "100%";
+    startBtn.disabled = false;
+    startBtn.textContent = "Reiniciar";
+  }
+
+  function startGame() {
+    resetGame();
+    startBtn.disabled = true;
+
+    // Enciende la linterna (si puede)
+    turnOnTorch().then(stop => stopTorch = stop);
 
     interval = setInterval(() => {
       countdown--;
-      document.getElementById("timer").textContent = countdown + "s";
+      timerEl.textContent = countdown + "s";
+      updateProgressBar();
+
+      playBeep(800 + (10 - countdown) * 50, 80);
 
       if (countdown <= 0) {
         clearInterval(interval);
@@ -86,32 +254,9 @@
   }
 
   window.addEventListener("devicemotion", e => {
-    if (bombDisabled) return;
+    if (bombDisabled || countdown <= 0) return;
+    let acc = e.accelerationIncludingGravity || e.acceleration;
 
-    let acc = e.acceleration;
-    let total = Math.abs(acc.x) + Math.abs(acc.y) + Math.abs(acc.z);
-    motionForce += total;
+    if (!acc) return;
 
-    if (motionForce > 100) {
-      bombDisabled = true;
-      clearInterval(interval);
-      if (stopTorch) stopTorch();
-      navigator.vibrate([200, 100, 200]);
-      document.getElementById("timer").textContent = "💚 Desactivada";
-    }
-  });
-
-  function boom() {
-    if (stopTorch) stopTorch();
-    navigator.vibrate([500, 200, 500, 200, 1000]);
-    document.body.style.background = "red";
-    document.getElementById("timer").textContent = "💥 ¡BOOM!";
-  }
-
-  // Registrar service worker para PWA
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
-  }
-</script>
-</body>
-</html>
+    let total = Math.abs(acc.x || 0) + Math.abs(acc.y
